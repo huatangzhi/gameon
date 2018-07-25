@@ -44,7 +44,7 @@ platform_up() {
 platform_down() {
   if kubectl get namespace gameon-system > /dev/null 2>&1; then
     if [ -f .gameontext.helm ];  then
-      wrap_helm delete --purge go-system
+      wrap_helm delete --purge gameon-system
     else
       wrap_kubectl delete -R -f kubernetes/kubectl
     fi
@@ -52,6 +52,27 @@ platform_down() {
   else
     ok "gameon-system stopped"
   fi
+  
+  if [ -f .gameontext.istio ]; then
+    if kubectl get namespace istio-system > /dev/null 2>&1; then
+      read -p "Do you want to remove istio? [y] " answer
+      if [ -z $answer ] || [[ $answer =~ [Yy] ]]; then
+        cd $(cat .gameontext.istio)
+        wrap_helm delete --purge istio
+        wrap_kubectl delete namespace istio-system
+      fi
+    else
+      ok "istio-system stopped"
+    fi
+  fi
+
+  if [ -f .gameontext.helm ] && $(get_tiller); then
+    read -p "Do you want to reset helm? [y] " answer
+    if [ -z $answer ] || [[ $answer =~ [Yy] ]]; then
+       wrap_helm reset
+    fi
+  fi
+  echo ""
 }
 
 rebuild() {
@@ -76,7 +97,7 @@ rebuild() {
     echo "*****"
     cd "$project"
 
-    if [ -e "${project}/build.gradle" ]; then
+    if [ -e "build.gradle" ]; then
       echo "Building project ${project} with gradle"
       ./gradlew build --rerun-tasks
       rc=$?
@@ -90,9 +111,8 @@ rebuild() {
       echo "webapp source present:  $(ls -d ${GO_DIR}/webapp/app)"
       ./build.sh
       ./build.sh final
-    elif [ -f ${project}/Dockerfile ]; then
+    elif [ -f Dockerfile ]; then
       echo "Re-building docker image for ${project}"
-      cd "$project"
       ${DOCKER_CMD} build -t gameontext/gameon-${project} .
     fi
 
@@ -112,14 +132,12 @@ usage() {
     down     -- delete the gameon-system namespace
     status   -- return status of gameon-system namespace
     wait     -- wait until the game services are up and ready to play!
-
-    mini-istio -- minikube start with parameters for istio
   "
 }
 
 case "$ACTION" in
   reset)
-    reset
+    reset_go
     setup
   ;;
   setup)
@@ -131,10 +149,6 @@ case "$ACTION" in
   down)
     platform_down
   ;;
-  host)
-    ingress_host
-    reset
-  ;;
   rebuild)
     rebuild $@
   ;;
@@ -145,14 +159,6 @@ case "$ACTION" in
     echo "
     When ready, the game is available at https://${GAMEON_INGRESS}/
     "
-  ;;
-  mini-istio)
-    wrap_minikube start \
-      --extra-config=controller-manager.ClusterSigningCertFile="/var/lib/localkube/certs/ca.crt" \
-      --extra-config=controller-manager.ClusterSigningKeyFile="/var/lib/localkube/certs/ca.key" \
-      --extra-config=apiserver.Admission.PluginNames=NamespaceLifecycle,LimitRanger,ServiceAccount,PersistentVolumeLabel,DefaultStorageClass,DefaultTolerationSeconds,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,ResourceQuota \
-      --kubernetes-version=v1.9.0 \
-      --memory 8192
   ;;
   env)
     echo "alias go-run='${SCRIPTDIR}/go-run.sh';"
@@ -169,6 +175,9 @@ case "$ACTION" in
     else
       echo "You haven't started any game services"
     fi
+  ;;
+  host)
+    define_ingress
   ;;
   *)
     usage
