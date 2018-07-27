@@ -5,14 +5,14 @@ metadata:
   namespace: gameon-system
 spec:
   selector:
-    istio: ingressgateway # use istio default controller
+    istio: ingressgateway # use istio gateway impl
   servers:
   - port:
-      number: 80
       name: http
+      number: 80
       protocol: HTTP
     hosts:
-    - gameon.192.168.99.100.xip.io
+    - 'gameon.192.168.99.100.xip.io'
     tls:
       httpsRedirect: true # sends 301 redirect for http requests
   - port:
@@ -20,8 +20,9 @@ spec:
       name: https
       protocol: HTTPS
     hosts:
-    - gameon.192.168.99.100.xip.io
+    - 'gameon.192.168.99.100.xip.io'
     tls:
       mode: SIMPLE #enables HTTPS on this port
-      serverCertificate: /etc/certs/servercert.pem
-      privateKey: /etc/certs/privatekey.pem
+      serverCertificate: /etc/istio/ingressgateway-certs/tls.crt
+      privateKey: /etc/istio/ingressgateway-certs/tls.key
+

@@ -291,13 +291,13 @@ get_cluster_ip() {
     fi
   fi
 
-  if [ -z ${GAMEON_INGRESS+x} ]; then
+  if [ -z ${GAMEON_INGRESS+x} ] && ! test_local_kubernetes; then
     ingress_host
   fi
 }
 
 check_global_cert() {
-  wrap_kubectl -n gameon-system get secret global-cert
+  wrap_kubectl -n gameon-system get secret global-cert 2>/dev/null
   local exists=$?
 
   if [ $# -gt 0 ] && [ $exists -eq 0 ]; then
@@ -312,10 +312,28 @@ check_global_cert() {
   else
     ok "Found global-cert secret in gameon-system namespace"
   fi
+
+  if [ -f .gameontext.istio ]; then
+    wrap_kubectl -n istio-system get secret istio-ingressgateway-certs 2>/dev/null
+    local exists=$?
+
+    if [ $# -gt 0 ] && [ $exists -eq 0 ]; then
+      wrap_kubectl -n istio-system delete secret istio-ingressgateway-certs
+      ok "Deleted old secret"
+      exists=1
+    fi
+
+    if [ $exists -eq 1 ]; then
+      wrap_kubectl -n istio-system create secret tls istio-ingressgateway-certs --cert=.gameontext.onlycert.pem --key=.gameontext.onlykey.pem
+      ok "Created istio-ingressgateway-certs secret in istio-system namespace"
+    else
+      ok "Found istio-ingressgateway-certs secret in istio-system namespace"
+    fi
+  fi
 }
 
 reset_go() {
-  rm .gameontext.cert.pem
+  rm .gameontext.*.pem
   rm -f  kubernetes/kubectl/ingress.yaml
   rm -f kubernetes/kubectl/configmap.yaml
   rm -f kubernetes/chart/gameon-system/values.yaml
@@ -397,8 +415,8 @@ setup() {
        -out .gameontext.onlycert.pem \
        -subj "${SUBJECT}"
     cat .gameontext.onlycert.pem .gameontext.onlykey.pem > .gameontext.cert.pem
-    rm .gameontext.onlycert.pem .gameontext.onlykey.pem
     ok "Created a new certificate (.gameontext.cert.pem)"
+
     check_global_cert force
   fi
 

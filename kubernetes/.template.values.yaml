@@ -1,5 +1,5 @@
 global:
-  frontDoor: GAMEON_INGRESS
+  frontDoor: GAMEON_INGRESS:SECURE_INGRESS_PORT
   mode: development
   data:
 # Global: interservice communication
